@@ -1,5 +1,5 @@
 // Activity Bar Component
-import { Search, Terminal, Bot, Settings, RefreshCw } from 'lucide-react'
+import { Search, Terminal, Bot, Settings } from 'lucide-react'
 
 interface Props {
   aiPanelOpen: boolean

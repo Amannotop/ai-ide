@@ -1,6 +1,6 @@
 // Command Palette Component
-import { useState, useEffect, useRef, useCallback } from 'react'
-import { Search, Terminal, Bot, Plus, FileText, Settings, RefreshCw } from 'lucide-react'
+import { useState, useEffect, useRef } from 'react'
+import { Search, Terminal, Bot, Plus, Settings } from 'lucide-react'
 
 interface Props {
   isOpen: boolean
