@@ -2,14 +2,13 @@
 import { useState, useRef, useEffect, useCallback } from 'react'
 import { Terminal as TerminalIcon, X, Square, Plus } from 'lucide-react'
 
-interface Props {}
-
 interface TerminalInstance {
   id: string
   name: string
 }
 
-export default function TerminalPanel() {
+interface Props { onClose?: () => void }
+export default function TerminalPanel({ onClose: _onClose }: Props = {}) {
   const [terminals, setTerminals] = useState<TerminalInstance[]>([])
   const [activeTerminal, setActiveTerminal] = useState<string | null>(null)
   const [input, setInput] = useState('')

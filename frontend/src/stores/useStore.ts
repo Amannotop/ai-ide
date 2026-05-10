@@ -136,7 +136,7 @@ export interface GitStatus {
 
 export const useStore = create<AppState>()(
   devtools(
-    (set, get) => ({
+    (set) => ({
       // Initial state
       tabs: [],
       activeTabId: null,

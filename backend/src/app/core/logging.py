@@ -3,22 +3,9 @@ from __future__ import annotations
 
 import logging
 import structlog
-from structlog import WriteLoggerFactory
 from structlog.stdlib import add_log_level
 
 from app.config.settings import get_settings
-
-# Dev console renderer
-console_renderer = structlog.dev.ConsoleRenderer(
-    colors=True,
-    exception_chaining=True,
-    show_log_level=True,
-    show_timestamp=True,
-    pad_event=50,
-)
-
-# JSON renderer for production
-json_renderer = structlog.processors.JSONRenderer()
 
 
 def configure_logging() -> None:
@@ -41,22 +28,25 @@ def configure_logging() -> None:
         structlog.processors.UnicodeDecoder(),
     ]
 
-    dev_processors = shared_processors + [console_renderer]
-    prod_processors = shared_processors + [json_renderer]
-
+    # Dev console renderer
     if settings.debug:
-        final_processors = dev_processors
+        final_processors = shared_processors + [
+            structlog.dev.ConsoleRenderer(
+                colors=True,
+                pad_event=50,
+            )
+        ]
     else:
-        final_processors = prod_processors
+        # JSON renderer for production
+        final_processors = shared_processors + [structlog.processors.JSONRenderer()]
 
     structlog.configure(
         processors=final_processors,
-        logger_factory=WriteLoggerFactory(),
+        logger_factory=structlog.PrintLoggerFactory(),
         wrapper_class=structlog.make_filtering_bound_logger(
             getattr(logging, settings.log_level.upper()),
         ),
         context_class=dict,
-        logger_factory=structlog.PrintLoggerFactory(),
         cache_logger_on_first_use=True,
     )
 
