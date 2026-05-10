@@ -1,9 +1,9 @@
 """Health check and root API endpoints."""
 from __future__ import annotations
 
-from fastapi import APIRouter, Response
+from fastapi import APIRouter
 
-router = APIRouter(prefix="/api/v1", tags=["health"])
+router = APIRouter(prefix="", tags=["health"])
 
 
 @router.get("/health")

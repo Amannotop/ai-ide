@@ -19,7 +19,6 @@ from app.schemas import (
     ConversationCreate,
     ConversationSchema,
     EmbeddingCreate,
-    FileSnapshot as FileSnapshotModel,
     WorkspaceMemoryCreate,
 )
 

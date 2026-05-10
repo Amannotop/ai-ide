@@ -15,10 +15,10 @@ api_router = APIRouter()
 def register_routes() -> None:
     """Register all API routes."""
     api_router.include_router(health_router)
-    api_router.include_router(files_router)
-    api_router.include_router(terminal_router)
-    api_router.include_router(git_router)
-    api_router.include_router(agent_router)
+    api_router.include_router(files_router, prefix="/files")
+    api_router.include_router(terminal_router, prefix="/terminal")
+    api_router.include_router(git_router, prefix="/git")
+    api_router.include_router(agent_router, prefix="/agent")
 
 
 register_routes()
