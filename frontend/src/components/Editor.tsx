@@ -1,5 +1,5 @@
 // Monaco Editor Component
-import { useRef, useEffect, useState, useCallback } from 'react'
+import { useRef, useEffect, useState } from 'react'
 import Editor, { type Monaco } from '@monaco-editor/react'
 import { useStore } from '../stores/useStore'
 import { EditorTab } from '../shared/types'

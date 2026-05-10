@@ -1,5 +1,4 @@
 // File Viewer - shows binary files, images, etc.
-import { useMemo } from 'react'
 
 interface Props {
   content: string

@@ -1,5 +1,5 @@
 // Main App Layout Component
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect } from 'react'
 import { useStore } from './stores/useStore'
 import { api } from './lib/api'
 import Editor from './components/Editor'
@@ -10,6 +10,7 @@ import StatusBar from './components/StatusBar'
 import ActivityBar from './components/ActivityBar'
 import CommandPalette from './components/CommandPalette'
 import AgentPanel from './components/AgentPanel'
+import './index.css'
 
 function App() {
   const {
