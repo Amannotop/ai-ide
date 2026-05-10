@@ -9,7 +9,7 @@ from app.api.git import router as git_router
 from app.api.health import router as health_router
 from app.api.terminal import router as terminal_router
 
-api_router = APIRouter()
+api_router = APIRouter(prefix="/api/v1")
 
 
 def register_routes() -> None:
