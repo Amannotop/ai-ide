@@ -1,9 +1,8 @@
 // AI Chat Panel Component
 import { useState, useRef, useCallback, useEffect } from 'react'
-import { Send, Bot, User, Loader2, Plus, ChevronDown, CornerDownLeft, BotMessage2 } from 'lucide-react'
+import { Send, Bot, User, Loader2, Plus } from 'lucide-react'
 import { api } from '../lib/api'
 import { useStore } from '../stores/useStore'
-import { Button } from './ui/Button'
 
 interface Props {
   onClose: () => void
@@ -39,18 +38,16 @@ async function detectContextFiles(query: string): Promise<FileOption[]> {
 }
 
 // Detect symbols from the tab content
-function detectSymbols(content: string, language: string): string[] {
+function detectSymbols(content: string): string[] {
   const symbols: string[] = []
   if (!content) return symbols
 
-  // Class definitions
   const classRegex = /(?:class|interface|struct)\s+(\w+)/g
   let match
   while ((match = classRegex.exec(content)) !== null) {
     symbols.push(match[1])
   }
 
-  // Function/method definitions
   const funcRegex = /(?:function|const\s+\w+\s*[:=]\s*(?:async\s*)?(?:function|\()|export\s+(?:function|const|class|interface|type|enum)\s+)(\w+)/g
   while ((match = funcRegex.exec(content)) !== null) {
     symbols.push(match[1])
@@ -65,30 +62,12 @@ export default function AIChatPanel({ onClose }: Props) {
   const [isLoading, setIsLoading] = useState(false)
   const [model, setModel] = useState('qwen2.5-coder:7b')
   const [showModels, setShowModels] = useState(false)
-  const [contextFiles, setContextFiles] = useState<FileOption[]>([])
   const [selectedFiles, setSelectedFiles] = useState<Set<string>>(new Set())
   const [showContextPicker, setShowContextPicker] = useState(false)
-  const [conversations, setConversations] = useState<{ id: string; title: string }[]>([])
-  const [showConversations, setShowConversations] = useState(false)
+  const [contextFiles, setContextFiles] = useState<FileOption[]>([])
 
   const chatEndRef = useRef<HTMLDivElement>(null)
-  const textareaRef = useRef<HTMLTextAreaElement>(null)
   const { activeTabId, tabs } = useStore()
-
-  // Load conversations from backend
-  const loadConversations = useCallback(async () => {
-    try {
-      const res = await api.get('/v1/agent/tasks')
-      setConversations(res.data || [])
-    } catch {
-      // Backend might not have conversations yet
-      setConversations([])
-    }
-  }, [])
-
-  useEffect(() => {
-    loadConversations()
-  }, [loadConversations])
 
   useEffect(() => {
     chatEndRef.current?.scrollIntoView({ behavior: 'smooth' })
@@ -107,24 +86,11 @@ export default function AIChatPanel({ onClose }: Props) {
   }, [input])
 
   // Get symbols from current tab
-  const getCurrentTabSymbols = useCallback((): { name: string; type: string }[] => {
+  const getSymbols = useCallback((): string[] => {
     const activeTab = tabs.find((t) => t.id === activeTabId)
     if (!activeTab) return []
-    const symbols = detectSymbols(activeTab.content, activeTab.language)
-    return symbols.map((s) => ({ name: s, type: 'symbol' }))
+    return detectSymbols(activeTab.content)
   }, [activeTabId, tabs])
-
-  // Create a new conversation
-  const handleNewConversation = useCallback(async () => {
-    try {
-      const res = await api.post('/v1/conversations', { title: 'New Chat', model })
-      setConversations((prev) => [...prev, { id: res.data.id, title: res.data.title }])
-      setMessages([])
-    } catch {
-      // Fallback: just clear messages
-      setMessages([])
-    }
-  }, [model])
 
   // Send message
   const handleSend = useCallback(
@@ -153,7 +119,7 @@ export default function AIChatPanel({ onClose }: Props) {
 
       // Add current tab context
       if (activeTab) {
-        const symbols = detectSymbols(activeTab.content, activeTab.language)
+        const symbols = detectSymbols(activeTab.content)
         prompt = `[Active file: ${activeTab.path} (${activeTab.language})]\n${symbols.length > 0 ? `[Symbols: ${symbols.join(', ')}]\n` : ''}\n\n${prompt}`
       }
 
@@ -169,7 +135,6 @@ export default function AIChatPanel({ onClose }: Props) {
 
       try {
         // Check if Ollama is available first
-        let useStreaming = true
         let ollamaAvailable = false
         try {
           const health = await api.get('/v1/health', { timeout: 2000 })
@@ -179,7 +144,7 @@ export default function AIChatPanel({ onClose }: Props) {
         }
 
         if (ollamaAvailable) {
-          // Try streaming first
+          // Try streaming first via WebSocket
           try {
             const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
             const wsUrl = `${wsProtocol}//${window.location.host}/ws/v1/agent/chat-stream`
@@ -231,7 +196,7 @@ export default function AIChatPanel({ onClose }: Props) {
                   const updated = [...prev]
                   const last = updated[updated.length - 1]
                   if (last && last.role === 'assistant') {
-                    last.content += event.data
+                    last.content += (event.data as string)
                   }
                   return updated
                 })
@@ -240,19 +205,20 @@ export default function AIChatPanel({ onClose }: Props) {
 
             ws.onerror = () => {
               setIsLoading(false)
-              useFallbackStreaming()
+              fallbackStreaming()
             }
 
             ws.onclose = () => {
-              if (messages[assistantIndex]?.content === '') {
+              const lastMsg = messages[assistantIndex]
+              if (lastMsg && lastMsg.content === '') {
                 setIsLoading(false)
               }
             }
-          } catch (wsErr) {
-            useFallbackStreaming()
+          } catch {
+            fallbackStreaming()
           }
         } else {
-          useFallbackStreaming()
+          fallbackStreaming()
         }
       } catch (error) {
         setMessages((prev) => {
@@ -270,7 +236,7 @@ export default function AIChatPanel({ onClose }: Props) {
   )
 
   // Fallback: non-streaming HTTP request
-  const useFallbackStreaming = useCallback(async () => {
+  const fallbackStreaming = useCallback(async () => {
     try {
       const result = await api.post('/v1/agent/chat', {
         model,
@@ -314,11 +280,6 @@ export default function AIChatPanel({ onClose }: Props) {
         e.preventDefault()
         handleSend()
       }
-      // Ctrl+K for command palette
-      if (e.key === 'k' && (e.metaKey || e.ctrlKey)) {
-        e.preventDefault()
-        // This will be handled globally
-      }
     },
     [handleSend]
   )
@@ -330,7 +291,7 @@ export default function AIChatPanel({ onClose }: Props) {
       {/* Header */}
       <div className="flex items-center justify-between px-3 py-2 border-b border-[#2a2a35] min-h-[34px]">
         <div className="flex items-center gap-1.5">
-          <BotMessage2 className="w-4 h-4 text-[#8888a0]" />
+          <Bot className="w-4 h-4 text-[#8888a0]" />
           <span className="text-xs font-semibold text-[#8888a0] uppercase tracking-wider">
             AI Chat
           </span>
@@ -377,7 +338,7 @@ export default function AIChatPanel({ onClose }: Props) {
       <div className="flex-1 overflow-y-auto px-3 py-3 space-y-3">
         {messages.length === 0 ? (
           <div className="flex flex-col items-center justify-center h-full text-[#555565] text-sm space-y-2">
-            <BotMessage2 className="w-10 h-10 opacity-30" />
+            <Bot className="w-10 h-10 opacity-30" />
             <p>Ask me anything about your codebase</p>
             <p className="text-xs text-[#444455]">
               I can read files, search your codebase, write code, and more
@@ -440,7 +401,6 @@ export default function AIChatPanel({ onClose }: Props) {
                 key={fp}
                 className="inline-flex items-center gap-1 px-2 py-0.5 text-xs bg-[#1e2a1e] text-[#8ec88e] rounded border border-[#2a3a2a]"
               >
-                <CornerDownLeft className="w-3 h-3" />
                 {fp.split('/').pop()}
                 <button
                   className="ml-1 hover:text-[#ff7b72]"
@@ -480,18 +440,18 @@ export default function AIChatPanel({ onClose }: Props) {
                     return next
                   })}
                 >
-                  <File className="w-3 h-3" />
+                  <span>📄</span>
                   {f.path.split('/').pop()}
                 </button>
               ))}
             </div>
           )}
           <textarea
-            ref={textareaRef}
+            ref={null}
             value={input}
             onChange={(e) => setInput(e.target.value)}
             onKeyDown={handleKeyDown}
-            placeholder={`Ask about your codebase... (${navigator.platform.includes('Mac') ? '⌘' : 'Ctrl'}+K for commands)`}
+            placeholder="Ask about your codebase... (Ctrl+K for commands)"
             className="flex-1 resize-none bg-[#18181e] border border-[#2a2a35] rounded-lg px-3 py-2 text-sm text-[#c8c8d4] placeholder-[#555565] focus:border-[#444455] focus:outline-none max-h-32 leading-relaxed"
             rows={1}
             onInput={(e) => {

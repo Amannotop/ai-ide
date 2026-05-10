@@ -9,9 +9,6 @@ import TerminalPanel from './components/TerminalPanel'
 import StatusBar from './components/StatusBar'
 import ActivityBar from './components/ActivityBar'
 import CommandPalette from './components/CommandPalette'
-import { Button } from './components/ui/Button'
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from './components/ui/Dialog'
-import FileViewer from './components/FileViewer'
 import AgentPanel from './components/AgentPanel'
 
 function App() {
