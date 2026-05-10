@@ -1,6 +1,8 @@
 """Git integration API endpoints."""
 from __future__ import annotations
 
+import asyncio
+import subprocess
 from pathlib import Path
 from typing import Any
 
@@ -10,7 +12,7 @@ from app.config.settings import get_settings
 from app.core.exceptions import ToolError
 from app.core.logging import get_logger
 
-router = APIRouter(prefix="/api/v1/git", tags=["git"])
+router = APIRouter(tags=["git"])
 logger = get_logger(__name__)
 
 
@@ -25,22 +27,14 @@ def _validate_repo_path(path: str) -> Path:
 
 async def git_run(repo_path: Path, *args: str, timeout: int = 30000) -> dict[str, Any]:
     """Run a git command and return parsed results."""
-    import subprocess
-
     try:
         proc = await asyncio.create_subprocess_exec(
-            "git", *args,
-            cwd=str(repo_path),
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
+            "git", *args, cwd=str(repo_path),
+            stdout=subprocess.PIPE, stderr=subprocess.PIPE,
             env={**__import__("os").environ, "PATH": __import__("os").environ.get("PATH", "")},
         )
         stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=timeout / 1000)
-        return {
-            "returncode": proc.returncode,
-            "stdout": stdout.decode("utf-8", errors="replace"),
-            "stderr": stderr.decode("utf-8", errors="replace"),
-        }
+        return {"returncode": proc.returncode, "stdout": stdout.decode("utf-8", errors="replace"), "stderr": stderr.decode("utf-8", errors="replace")}
     except asyncio.TimeoutError:
         proc.kill()
         raise ToolError(f"Git command timed out: {' '.join(args)}")
@@ -52,8 +46,6 @@ async def git_run(repo_path: Path, *args: str, timeout: int = 30000) -> dict[str
 async def git_status(repo_path: str = ".") -> dict:
     """Get git status for a repository."""
     path = _validate_repo_path(repo_path)
-
-    # Check if it's a git repo
     if not (path / ".git").exists():
         return {"is_repo": False, "path": str(path)}
 
@@ -84,13 +76,7 @@ async def git_status(repo_path: str = ".") -> dict:
             elif "behind" in part:
                 ahead_behind["behind"] = int(part.split()[-1])
 
-    return {
-        "is_repo": True,
-        "branch": branch_name or "unknown",
-        "ahead": ahead_behind["ahead"],
-        "behind": ahead_behind["behind"],
-        "changes": changes,
-    }
+    return {"is_repo": True, "branch": branch_name or "unknown", "ahead": ahead_behind["ahead"], "behind": ahead_behind["behind"], "changes": changes}
 
 
 @router.post("/init")
@@ -105,7 +91,7 @@ async def git_init(repo_path: str = ".") -> dict:
 
 
 @router.post("/commit")
-async def git_commit(message: str, repo_path: str = ".") -> dict:
+async def git_commit(message: str = "", repo_path: str = ".") -> dict:
     """Commit changes in the repository."""
     path = _validate_repo_path(repo_path)
     await git_run(path, "add", "-A")
@@ -148,20 +134,20 @@ async def git_pull(remote: str = "origin", branch: str | None = None, repo_path:
 async def git_branches(repo_path: str = ".") -> dict:
     """List git branches."""
     path = _validate_repo_path(repo_path)
-    result = await git_run(path, "branch", "-a")
-    if result["returncode"] != 0:
-        return {"branches": [], "current": None}
-
-    branches = []
+    branches: list[dict] = []
     current = None
-    for line in result["stdout"].strip().split("\n"):
-        if line:
-            name = line.strip().lstrip("* ").strip()
-            is_current = line.startswith("*")
-            if is_current:
-                current = name
-            branches.append({"name": name, "current": is_current})
-
+    try:
+        result = await git_run(path, "branch", "-a")
+        if result["returncode"] == 0:
+            for line in result["stdout"].strip().split("\n"):
+                if line:
+                    name = line.strip().lstrip("* ").strip()
+                    is_current = line.startswith("*")
+                    if is_current:
+                        current = name
+                    branches.append({"name": name, "current": is_current})
+    except Exception:
+        pass
     return {"branches": branches, "current": current}
 
 
@@ -169,26 +155,17 @@ async def git_branches(repo_path: str = ".") -> dict:
 async def git_log(repo_path: str = ".", limit: int = 20) -> list[dict]:
     """Get recent git commits."""
     path = _validate_repo_path(repo_path)
-    import subprocess
-
     try:
         proc = await asyncio.create_subprocess_exec(
-            "git", "log", f"--{limit}",
-            "--oneline", "--format=%H|%s|%an|%ai",
-            cwd=str(path),
-            stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+            "git", "log", f"--{limit}", "--oneline", "--format=%H|%s|%an|%ai",
+            cwd=str(path), stdout=subprocess.PIPE, stderr=subprocess.PIPE,
         )
         stdout, _ = await asyncio.wait_for(proc.communicate(), timeout=10)
         commits = []
         for line in stdout.decode().strip().split("\n"):
             if "|" in line:
                 parts = line.split("|", 3)
-                commits.append({
-                    "hash": parts[0][:12],
-                    "message": parts[1],
-                    "author": parts[2],
-                    "date": parts[3] if len(parts) > 3 else "",
-                })
+                commits.append({"hash": parts[0][:12], "message": parts[1], "author": parts[2], "date": parts[3] if len(parts) > 3 else ""})
         return commits
     except Exception:
         return []

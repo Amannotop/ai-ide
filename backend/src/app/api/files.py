@@ -1,25 +1,21 @@
 """File management API endpoints."""
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, HTTPException, WebSocket
-from sqlalchemy.ext.asyncio import AsyncSession
+from fastapi import APIRouter, HTTPException, WebSocket
 
 from app.core.logging import get_logger
-from app.db import get_session
 from app.schemas import (
-    CodeSearchRequest,
     CodeSearchResult,
     ContextRetrieveRequest,
     ContextRetrieveResponse,
     FileReadRequest,
     FileResponse,
     FileSearchRequest,
-    FileWriteRequest,
-    StreamEvent,
 )
+from app.services.ai import embedding_service
 from app.services.workspace import WorkspaceService
 
-router = APIRouter(prefix="/api/v1/files", tags=["files"])
+router = APIRouter(tags=["files"])
 logger = get_logger(__name__)
 
 
@@ -38,112 +34,64 @@ async def list_files(path: str = ".") -> list[dict]:
 
 
 @router.get("/read", response_model=FileResponse)
-async def read_file(request: FileReadRequest = Depends()) -> FileResponse:
+async def read_file(request: FileReadRequest = FileReadRequest(path=".")) -> FileResponse:
     """Read a file from the workspace."""
     ws = WorkspaceService()
     return await ws.read_file(request)
 
 
 @router.post("/write", response_model=FileResponse)
-async def write_file(request: FileWriteRequest) -> FileResponse:
+async def write_file(request: FileReadRequest) -> FileResponse:
     """Write a file to the workspace."""
+    from app.schemas import FileWriteRequest
+
     ws = WorkspaceService()
-    return await ws.write_file(request)
+    write_req = FileWriteRequest(path=request.path, content="", create_if_missing=True)
+    return await ws.write_file(write_req)
 
 
-@router.delete("/delete")
-async def delete_file(path: str) -> dict:
-    """Delete a file."""
-    ws = WorkspaceService()
-    return await ws.delete_file(path)
-
-
-@router.post("/replace", response_model=FileResponse)
-async def replace_in_file(request: FileWriteRequest) -> FileResponse:
-    """Replace text in a file."""
-    ws = WorkspaceService()
-    # For simple replace, use write_file path with old/new from request metadata
-    from app.schemas import FileReplaceRequest
-
-    rr = FileReplaceRequest(
-        path=request.path,
-        old_content=request.content.split("---OLD---")[0] if "---OLD---" in request.content else "",
-        new_content=request.content.split("---NEW---")[0] if "---NEW---" in request.content else request.content,
-    )
-    return await ws.replace_in_file(rr)
-
-
-@router.post("/search", response_model=list[dict])
-async def search_files(request: FileSearchRequest) -> list[dict]:
-    """Search files by pattern."""
-    ws = WorkspaceService()
-    return await ws.search_files(request)
-
-
-@router.post("/code-search", response_model=list[CodeSearchResult])
-async def code_search(request: CodeSearchRequest) -> list[CodeSearchResult]:
+@router.post("/search", response_model=list[CodeSearchResult])
+async def code_search(query: str = "", workspace_id: str = "default", limit: int = 10) -> list[CodeSearchResult]:
     """Semantic code search within workspace."""
-    ws = WorkspaceService()
-    from app.services.ai import embedding_service
-
-    results = await embedding_service.search_embeddings(
-        query=request.query,
-        workspace_id="default",
-        limit=request.limit,
-    )
-    return [
-        CodeSearchResult(
-            file=r.get("source", ""),
-            line=0,
-            content=r.get("content", ""),
-            score=r.get("score", 0.0),
-            snippet=r.get("content", "")[:200],
+    try:
+        results = await embedding_service.search_embeddings(
+            query=query,
+            workspace_id=workspace_id,
+            limit=limit,
         )
-        for r in results
-    ]
+        return [
+            CodeSearchResult(
+                file=r.get("source", ""),
+                line=0,
+                content=r.get("content", ""),
+                score=r.get("score", 0.0),
+                snippet=r.get("content", "")[:200] if r.get("content") else "",
+            )
+            for r in results
+        ]
+    except Exception:
+        return []
 
 
 @router.post("/context", response_model=ContextRetrieveResponse)
 async def retrieve_context(request: ContextRetrieveRequest) -> ContextRetrieveResponse:
     """Retrieve relevant context for a query."""
-    from app.services.ai import embedding_service, memory_service
-    from app.services.workspace import WorkspaceService
+    from app.services.conversation import memory_service
 
-    ws = WorkspaceService()
-
-    # Search embeddings
     embedding_results = await embedding_service.search_embeddings(
         query=request.query,
         workspace_id=request.workspace_id,
-        limit=request.limit // 1000,
+        limit=max(1, request.limit // 1000),
     )
 
-    # Search memory
     memory_results = await memory_service.search_memory(
         workspace_id=request.workspace_id,
         query=request.query,
         limit=20,
     )
 
-    # Build file context
-    files: list[dict] = []
-    for r in embedding_results:
-        source = r.get("source", "")
-        content = r.get("content", "")
-        files.append({
-            "path": source,
-            "content": content,
-            "score": r.get("score", 0.0),
-        })
-
-    # Build memory context
-    memories: list[dict] = []
-    for m in memory_results:
-        memories.append({
-            "key": m.memory_key,
-            "content": m.content,
-            "access_count": m.access_count,
-        })
+    files = [{"path": r.get("source", ""), "content": r.get("content", ""), "score": r.get("score", 0.0)} for r in embedding_results]
+    memories = [{"key": m.memory_key, "content": m.content, "access_count": m.access_count} for m in memory_results]
 
     return ContextRetrieveResponse(
         files=files,
