@@ -1,6 +1,6 @@
 // Agent Panel Component
 import { useState, useCallback } from 'react'
-import { Bot, Play, Square, Loader2, Send, CornerDownLeft } from 'lucide-react'
+import { Bot, Play, Square, Loader2 } from 'lucide-react'
 
 interface Props {
   onClose: () => void
@@ -15,14 +15,14 @@ interface AgentTask {
 }
 
 const TASK_TYPES = [
-  { key: 'code', label: 'Write Code', desc: 'Generate or modify code files' },
-  { key: 'fix', label: 'Fix Bugs', desc: 'Debug and fix code issues' },
-  { key: 'refactor', label: 'Refactor', desc: 'Improve code structure' },
-  { key: 'test', label: 'Tests', desc: 'Write or run tests' },
-  { key: 'explain', label: 'Explain Code', desc: 'Analyze and explain code' },
-  { key: 'review', label: 'Code Review', desc: 'Review code for issues' },
-  { key: 'security', label: 'Security Check', desc: 'Scan for security issues' },
-  { key: 'optimize', label: 'Optimize', desc: 'Optimize performance' },
+  { key: 'code', icon: '💻', label: 'Write Code', desc: 'Generate or modify code files' },
+  { key: 'fix', icon: '🔧', label: 'Fix Bugs', desc: 'Debug and fix code issues' },
+  { key: 'refactor', icon: '♻️', label: 'Refactor', desc: 'Improve code structure' },
+  { key: 'test', icon: '🧪', label: 'Tests', desc: 'Write or run tests' },
+  { key: 'explain', icon: '📖', label: 'Explain Code', desc: 'Analyze and explain code' },
+  { key: 'review', icon: '🔍', label: 'Code Review', desc: 'Review code for issues' },
+  { key: 'security', icon: '🛡️', label: 'Security Check', desc: 'Scan for security issues' },
+  { key: 'optimize', icon: '⚡', label: 'Optimize', desc: 'Optimize performance' },
 ]
 
 export default function AgentPanel({ onClose }: Props) {
@@ -41,7 +41,6 @@ export default function AgentPanel({ onClose }: Props) {
     setIsRunning(true)
     setAgentOutput([])
 
-    // Check for WebSocket support first
     let wsAvailable = false
     try {
       const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
@@ -65,7 +64,7 @@ export default function AgentPanel({ onClose }: Props) {
 
           if (data.type === 'step_start') {
             setTasks((prev) => prev.map((t) =>
-              t.id === taskId ? { ...t, progress: Math.min(100, data.data.step * 14) } : t
+              t.id === taskId ? { ...t, progress: Math.min(100, (data.data.step || 1) * 14) } : t
             ))
           } else if (data.type === 'complete') {
             setTasks((prev) => prev.map((t) =>
@@ -87,14 +86,12 @@ export default function AgentPanel({ onClose }: Props) {
             setIsRunning(false)
           }
         } catch {
-          // Handle raw text
-          setAgentOutput((prev) => [...prev, { type: 'raw', data: event.data as string }])
+          setAgentOutput((prev) => [...prev, { type: 'raw', data: (event.data as string).substring(0, 200) }])
         }
       }
 
       ws.onerror = () => {
         setAgentOutput((prev) => [...prev, { type: 'error', data: 'WebSocket connection failed. Trying HTTP fallback...' }])
-        // Fall back to HTTP
         fallbackExecute(taskId)
       }
 
@@ -104,7 +101,6 @@ export default function AgentPanel({ onClose }: Props) {
         }
       }
     } catch {
-      // WebSocket not available, use HTTP fallback
       fallbackExecute(taskId)
     }
   }, [goal, taskType, isRunning])
@@ -142,11 +138,6 @@ export default function AgentPanel({ onClose }: Props) {
     failed: 'text-[#ff7b72]',
   }
 
-  const typeIcons = {
-    code: '💻', fix: '🔧', refactor: '♻️', test: '🧪',
-    explain: '📖', review: '🔍', security: '🛡️', optimize: '⚡',
-  }
-
   return (
     <div className="h-full flex flex-col bg-[#0e0e14] relative">
       <div className="flex items-center justify-between px-3 py-2 border-b border-[#2a2a35] min-h-[34px]">
@@ -171,7 +162,7 @@ export default function AgentPanel({ onClose }: Props) {
                 }`}
               onClick={() => setTaskType(t.key)}
             >
-              <div className="text-lg">{t.icons?.[taskType === t.key ? 0 : 0] || t.label[0]}</div>
+              <div className="text-lg">{t.icon}</div>
               <div className="text-xs font-medium mt-1">{t.label}</div>
               <div className="text-[10px] text-[#686880] mt-0.5">{t.desc}</div>
             </button>
@@ -220,8 +211,6 @@ export default function AgentPanel({ onClose }: Props) {
                       : 'text-[#8888a0]'
                     }`}
                 >
-                  {line.type === 'step_start' && <CornerDownLeft className="w-3 h-3 inline mr-1" />}
-                  {line.type === 'step_result' && <CornerDownLeft className="w-3 h-3 inline mr-1" />}
                   {typeof line.data === 'string' ? line.data.substring(0, 200) : line.data}
                 </div>
               ))}
