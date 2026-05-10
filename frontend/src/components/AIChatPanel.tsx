@@ -86,13 +86,6 @@ export default function AIChatPanel({ onClose }: Props) {
   }, [input])
 
   // Get symbols from current tab
-  const getSymbols = useCallback((): string[] => {
-    const activeTab = tabs.find((t) => t.id === activeTabId)
-    if (!activeTab) return []
-    return detectSymbols(activeTab.content)
-  }, [activeTabId, tabs])
-
-  // Send message
   const handleSend = useCallback(
     async (e?: React.FormEvent) => {
       if (e) e.preventDefault()

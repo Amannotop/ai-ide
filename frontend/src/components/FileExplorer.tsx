@@ -1,13 +1,7 @@
 // File Explorer Component
-import { useState, useCallback, useEffect } from 'react'
+import { useState, useEffect } from 'react'
 import { ChevronRight, ChevronDown, File, Folder, FolderOpen } from 'lucide-react'
 import { FileSystemNode } from '../shared/types'
-
-interface Props {
-  data: FileSystemNode[]
-  onFileClick: (path: string) => void
-  onRefresh: () => void
-}
 
 interface TreeNodeProps {
   node: FileSystemNode
@@ -82,20 +76,22 @@ function TreeNode({ node, depth, onFileClick, openFolders, toggleFolder }: TreeN
   )
 }
 
-export default function FileExplorer({ data, onFileClick }: { data: FileSystemNode[]; onFileClick: (path: string) => void }) {
+interface Props {
+  data: FileSystemNode[]
+  onFileClick: (path: string) => void
+}
+
+export default function FileExplorer({ data, onFileClick }: Props) {
   const [openFolders, setOpenFolders] = useState<Set<string>>(new Set())
 
-  const toggleFolder = useCallback((path: string) => {
+  const toggleFolder = (path: string) => {
     setOpenFolders((prev) => {
       const next = new Set(prev)
-      if (next.has(path)) {
-        next.delete(path)
-      } else {
-        next.add(path)
-      }
+      if (next.has(path)) next.delete(path)
+      else next.add(path)
       return next
     })
-  }, [])
+  }
 
   // Auto-open root folders
   useEffect(() => {

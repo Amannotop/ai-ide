@@ -14,47 +14,6 @@ export default function MonacoEditor({ tab, onContentChange }: Props) {
   const { updateTabContent } = useStore()
   const [mounted, setMounted] = useState(false)
 
-  const handleEditorDidMount = useCallback((editor: any, monaco: Monaco) => {
-    editorRef.current = editor
-
-    // Configure editor defaults
-    editor.updateOptions({
-      fontSize: 13,
-      fontFamily: '"JetBrains Mono", "Fira Code", "SF Mono", Menlo, monospace',
-      minimap: { enabled: true },
-      scrollBeyondLastLine: false,
-      smoothScrolling: true,
-      cursorBlinking: 'smooth',
-      renderWhitespace: 'selection',
-      renderIndentGuides: true,
-      lineNumbersMinChars: 3,
-      tabSize: 2,
-      insertSpaces: true,
-      detectIndentation: true,
-      wordWrap: 'on',
-      wordWrapColumn: 120,
-      wrappingIndent: 'indent',
-    })
-
-    // Add custom command for save
-    editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyS, () => {
-      // Will be handled by the app
-    })
-
-    setMounted(true)
-  }, [])
-
-  const handleChange = useCallback(
-    (value: string | undefined) => {
-      if (value !== undefined && mounted) {
-        onContentChange?.(value)
-        updateTabContent(tab.id, value, true)
-      }
-    },
-    [tab.id, onContentChange, updateTabContent, mounted]
-  )
-
-  // Theme configuration
   useEffect(() => {
     if (editorRef.current) {
       const { monaco } = editorRef.current
@@ -91,6 +50,42 @@ export default function MonacoEditor({ tab, onContentChange }: Props) {
     }
   }, [])
 
+  const handleEditorDidMount = (editor: any, monaco: Monaco) => {
+    editorRef.current = editor
+
+    editor.updateOptions({
+      fontSize: 13,
+      fontFamily: '"JetBrains Mono", "Fira Code", "SF Mono", Menlo, monospace',
+      minimap: { enabled: true },
+      scrollBeyondLastLine: false,
+      smoothScrolling: true,
+      cursorBlinking: 'smooth',
+      renderWhitespace: 'selection' as const,
+      renderIndentGuides: true as any,
+      lineNumbersMinChars: 3,
+      tabSize: 2,
+      insertSpaces: true,
+      detectIndentation: true,
+      wordWrap: 'on' as const,
+      wordWrapColumn: 120,
+      wrappingIndent: 'indent' as const,
+      padding: { top: 12 },
+    })
+
+    editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyS, () => {
+      // Save handled by app
+    })
+
+    setMounted(true)
+  }
+
+  const handleChange = (value: string | undefined) => {
+    if (value !== undefined && mounted) {
+      onContentChange?.(value)
+      updateTabContent(tab.id, value, true)
+    }
+  }
+
   return (
     <Editor
       key={tab.id}
@@ -107,7 +102,6 @@ export default function MonacoEditor({ tab, onContentChange }: Props) {
         smoothScrolling: true,
         cursorBlinking: 'smooth',
         renderWhitespace: 'selection' as const,
-        renderIndentGuides: true,
         lineNumbersMinChars: 3,
         tabSize: 2,
         insertSpaces: true,

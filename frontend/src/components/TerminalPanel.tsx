@@ -1,33 +1,23 @@
 // Terminal Panel Component
 import { useState, useRef, useEffect, useCallback } from 'react'
-import { Terminal as TerminalIcon, X, Square, ChevronDown, Plus } from 'lucide-react'
+import { Terminal as TerminalIcon, X, Square, Plus } from 'lucide-react'
 
-interface Props {
-  onClose: () => void
-}
+interface Props {}
 
 interface TerminalInstance {
   id: string
   name: string
-  pid?: number
-  process?: any
 }
 
-export default function TerminalPanel({ onClose }: Props) {
+export default function TerminalPanel() {
   const [terminals, setTerminals] = useState<TerminalInstance[]>([])
   const [activeTerminal, setActiveTerminal] = useState<string | null>(null)
-  const [history, setHistory] = useState<string[]>([])
   const [input, setInput] = useState('')
-  const [outputs, setOutputs] = useState<Record<string, Array<{ type: string; data: string }>>>({})
-  const [wsConnected, setWsConnected] = useState(false)
-  const [wsError, setWsError] = useState<string | null>(null)
-
-  const wsRef = useRef<WebSocket | null>(null)
-  const inputRef = useRef<HTMLInputElement>(null)
-  const outputRefs = useRef<Record<string, HTMLDivElement | null>>({})
+  const [outputs, setOutputs] = useState<Record<string, string[]>>({})
   const nextId = useRef(0)
 
-  // WebSocket connection
+  const wsRef = useRef<WebSocket | null>(null)
+
   useEffect(() => {
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
     const wsUrl = `${protocol}//${window.location.host}/ws/v1/terminal/ws`
@@ -36,64 +26,45 @@ export default function TerminalPanel({ onClose }: Props) {
     wsRef.current = ws
 
     ws.onopen = () => {
-      setWsConnected(true)
-      wsError && setWsError(null)
-      // Create default terminal
-      addTerminal()
+      const id = `terminal-${nextId.current++}`
+      setTerminals([{ id, name: 'Terminal 1' }])
+      setActiveTerminal(id)
+      setOutputs((prev) => ({ ...prev, [id]: [] }))
     }
 
     ws.onmessage = (event) => {
       try {
         const data = JSON.parse(event.data as string)
-        if (data.type === 'output') {
+        if (data.type === 'output' || data.type === 'exit' || data.type === 'error') {
           setOutputs((prev) => {
             const terminalId = activeTerminal || Object.keys(prev)[0]
             if (!terminalId) return prev
-            const existing = (prev[terminalId] || [])
-            return {
-              ...prev,
-              [terminalId]: [...existing, data.data],
-            }
-          })
-        } else if (data.type === 'exit') {
-          // Process exited
-        } else if (data.type === 'error') {
-          setOutputs((prev) => {
-            const terminalId = activeTerminal || Object.keys(prev)[0]
-            if (!terminalId) return prev
-            const existing = (prev[terminalId] || [])
-            return {
-              ...prev,
-              [terminalId]: [...existing, { type: 'error', data: `Error: ${data.data.error}` }],
-            }
+            const existing = (prev[terminalId] || []) as string[]
+            const text = typeof data === 'object' && data.data ? (data.data.text || data.data || '') : event.data as string
+            return { ...prev, [terminalId]: [...existing, text] }
           })
         }
       } catch {
-        // Handle raw data
         setOutputs((prev) => {
           const terminalId = activeTerminal || Object.keys(prev)[0]
           if (!terminalId) return prev
-          const existing = (prev[terminalId] || [])
-          const decoded = typeof event.data === 'string' ? event.data : new TextDecoder().decode(event.data)
-          return {
-            ...prev,
-            [terminalId]: [...existing, decoded],
-          }
+          const existing = (prev[terminalId] || []) as string[]
+          const decoded = typeof event.data === 'string' ? event.data : new TextDecoder().decode(event.data as Blob as any)
+          return { ...prev, [terminalId]: [...existing, decoded] }
         })
       }
     }
 
     ws.onerror = () => {
-      setWsConnected(false)
-      setWsError('Failed to connect to terminal backend')
-    }
-
-    ws.onclose = () => {
-      setWsConnected(false)
+      setOutputs((prev) => {
+        const terminalId = activeTerminal || 'default'
+        const existing = (prev[terminalId] || []) as string[]
+        return { ...prev, [terminalId]: [...existing, 'Terminal backend not available'] }
+      })
     }
 
     return () => ws.close()
-  }, [activeTerminal])
+  }, [])
 
   const addTerminal = useCallback(() => {
     const id = `terminal-${nextId.current++}`
@@ -120,48 +91,24 @@ export default function TerminalPanel({ onClose }: Props) {
     if (!input.trim() || !wsRef.current || wsRef.current.readyState !== WebSocket.OPEN) return
 
     const command = input.trim()
-    setHistory((prev) => [command, ...prev])
     setOutputs((prev) => {
-      const existing = (prev[activeTerminal!] || [])
-      return {
-        ...prev,
-        [activeTerminal!]: [...existing, { type: 'input', data: `$ ${command}` }],
-      }
+      const existing = (prev[activeTerminal!] || []) as string[]
+      return { ...prev, [activeTerminal!]: [...existing, `$ ${command}`] }
     })
 
-    wsRef.current.send(JSON.stringify({
-      type: 'exec',
-      command,
-      cwd: '/',
-    }))
-
+    wsRef.current.send(JSON.stringify({ type: 'exec', command, cwd: '/workspace' }))
     setInput('')
   }, [input, activeTerminal])
 
-  const scrollToBottom = useCallback(() => {
-    const el = outputRefs.current[activeTerminal || '']
-    if (el) {
-      el.scrollTop = el.scrollHeight
-    }
-  }, [activeTerminal])
-
+  const scrollRef = useRef<HTMLDivElement>(null)
   useEffect(() => {
-    scrollToBottom()
-  }, [outputs, activeTerminal, scrollToBottom])
-
-  if (!wsConnected) {
-    return (
-      <div className="h-48 bg-[#0a0a0e] border-t border-[#2a2a35] flex flex-col items-center justify-center text-[#555565] text-sm">
-        <TerminalIcon className="w-8 h-8 mb-2 opacity-30" />
-        <p className="text-[#8888a0]">Terminal backend not available</p>
-        <p className="text-xs mt-1 text-[#555565]">Ensure the backend server is running</p>
-      </div>
-    )
-  }
+    if (scrollRef.current) {
+      scrollRef.current.scrollTop = scrollRef.current.scrollHeight
+    }
+  }, [outputs, activeTerminal])
 
   return (
     <div className="h-64 bg-[#0a0a0e] border-t border-[#2a2a35] flex flex-col">
-      {/* Tab bar */}
       <div className="flex items-center bg-[#121218] border-b border-[#2a2a35] overflow-x-auto h-7 flex-shrink-0">
         {terminals.map((term) => (
           <button
@@ -194,18 +141,12 @@ export default function TerminalPanel({ onClose }: Props) {
         </button>
       </div>
 
-      {/* Output area */}
       <div
-        ref={(el) => { outputRefs.current[activeTerminal || ''] = el }}
+        ref={scrollRef}
         className="flex-1 overflow-y-auto p-3 font-mono text-sm leading-relaxed"
       >
         {(outputs[activeTerminal || ''] || []).map((line, i) => (
-          <div key={i} className={typeof line === 'string' ? 'text-[#8888a0]' : line.type === 'input'
-            ? 'text-[#58a6ff]'
-            : 'text-[#c8c8d4]'
-          }>
-            {typeof line === 'string' ? line : line.data}
-          </div>
+          <div key={i} className="text-[#8888a0]">{line}</div>
         ))}
         {(!outputs[activeTerminal || ''] || outputs[activeTerminal || '']?.length === 0) && (
           <div className="text-[#555565] text-sm py-4">
@@ -214,12 +155,10 @@ export default function TerminalPanel({ onClose }: Props) {
         )}
       </div>
 
-      {/* Input */}
       <form onSubmit={handleCommand} className="flex-shrink-0 border-t border-[#2a2a35] bg-[#121218]">
         <div className="flex items-center px-3 py-1.5">
           <span className="text-[#58a6ff] mr-2 text-sm font-bold select-none">→</span>
           <input
-            ref={inputRef}
             value={input}
             onChange={(e) => setInput(e.target.value)}
             placeholder="Type a command..."

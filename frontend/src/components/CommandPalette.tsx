@@ -1,6 +1,6 @@
 // Command Palette Component
 import { useState, useEffect, useRef } from 'react'
-import { Search, Terminal, Bot, Plus, Settings } from 'lucide-react'
+import { Search, Terminal, Bot, Settings } from 'lucide-react'
 
 interface Props {
   isOpen: boolean
@@ -14,7 +14,6 @@ interface Command {
   description: string
   icon: React.ElementType
   action: () => void
-  category?: string
 }
 
 export default function CommandPalette({ isOpen, onClose, onOpenTerminal }: Props) {
@@ -49,22 +48,6 @@ export default function CommandPalette({ isOpen, onClose, onOpenTerminal }: Prop
   const getCommands = (): Command[] => {
     const all: Command[] = [
       {
-        key: 'new-file',
-        title: 'New File',
-        description: 'Create a new file',
-        icon: Plus,
-        action: () => {
-          const path = prompt('File path:')
-          if (path) {
-            fetch('/api/v1/files/write', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ path, content: '' }),
-            }).then(() => window.location.reload())
-          }
-        },
-      },
-      {
         key: 'terminal',
         title: 'Open Terminal',
         description: 'Open a new terminal session',
@@ -76,29 +59,14 @@ export default function CommandPalette({ isOpen, onClose, onOpenTerminal }: Prop
         title: 'Open AI Chat',
         description: 'Open the AI chat panel',
         icon: Bot,
-        action: () => {
-          // Dispatch custom event to toggle AI panel
-          window.dispatchEvent(new CustomEvent('toggle-ai-panel'))
-        },
+        action: () => window.dispatchEvent(new CustomEvent('toggle-ai-panel')),
       },
       {
         key: 'refresh',
-        title: 'Refresh Explorer',
-        description: 'Reload the file explorer',
-        icon: RefreshCw,
-        action: () => window.location.reload(),
-      },
-      {
-        key: 'settings',
-        title: 'Settings',
-        description: 'Open settings',
+        title: 'Refresh',
+        description: 'Reload the page',
         icon: Settings,
-        action: () => {
-          const path = prompt('Enter setting key=value:')
-          if (path) {
-            console.log('Setting:', path)
-          }
-        },
+        action: () => window.location.reload(),
       },
     ]
 
@@ -112,19 +80,6 @@ export default function CommandPalette({ isOpen, onClose, onOpenTerminal }: Prop
   }
 
   const commands = getCommands()
-
-  const handleKeyDown = (e: React.KeyboardEvent) => {
-    if (e.key === 'ArrowDown') {
-      e.preventDefault()
-      setSelected((s) => Math.min(s + 1, commands.length - 1))
-    } else if (e.key === 'ArrowUp') {
-      e.preventDefault()
-      setSelected((s) => Math.max(s - 1, 0))
-    } else if (e.key === 'Enter') {
-      e.preventDefault()
-      if (commands[selected]) commands[selected].action()
-    }
-  }
 
   if (!isOpen) return null
 
@@ -140,7 +95,6 @@ export default function CommandPalette({ isOpen, onClose, onOpenTerminal }: Prop
             ref={inputRef}
             value={query}
             onChange={(e) => setQuery(e.target.value)}
-            onKeyDown={handleKeyDown}
             placeholder="Type a command or search..."
             className="flex-1 bg-transparent outline-none text-sm text-[#c8c8d4] placeholder-[#555565]"
           />
